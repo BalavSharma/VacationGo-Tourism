@@ -90,8 +90,10 @@
     });
 
 
-    // Testimonials carousel
-    $(".testimonial-carousel").owlCarousel({
+    // Testimonials carousel (static only; dynamic ones are initialized after fetch)
+    $(".testimonial-carousel").filter(function () {
+        return !this.hasAttribute('data-testimonial-list');
+    }).owlCarousel({
         autoplay: true,
         smartSpeed: 1000,
         margin: 25,
@@ -160,6 +162,198 @@
             setTimeout(function () {
                 typeForward(0);
             }, delay);
+        }
+
+        // Team cards (staff) -> fetch from backend
+        var teamContainers = Array.from(document.querySelectorAll('[data-team-cards]'));
+
+        function renderTeam(container, team) {
+            container.innerHTML = '';
+            if (!team.length) {
+                container.innerHTML = '<div class="col-12 text-center text-muted small">No team members available right now.</div>';
+                return;
+            }
+
+            var fragment = document.createDocumentFragment();
+            team.forEach(function (member, idx) {
+                var col = document.createElement('div');
+                col.className = 'col-lg-3 col-md-6 wow fadeInUp';
+                col.setAttribute('data-wow-delay', (0.1 + (idx % 4) * 0.2).toFixed(1) + 's');
+
+                var card = document.createElement('div');
+                card.className = 'rounded shadow overflow-hidden bg-white';
+
+                var imgWrap = document.createElement('div');
+                imgWrap.className = 'position-relative';
+
+                var img = document.createElement('img');
+                img.className = 'img-fluid';
+                img.alt = member.name || 'Team member';
+                img.src = member.photoUrl || 'img/team-1.jpg';
+                imgWrap.appendChild(img);
+
+                var socials = document.createElement('div');
+                socials.className = 'position-absolute start-50 top-100 translate-middle d-flex align-items-center';
+
+                function addSocial(url, icon) {
+                    if (!url) return;
+                    var a = document.createElement('a');
+                    a.className = 'btn btn-square btn-primary mx-1';
+                    a.href = url;
+                    a.target = '_blank';
+                    a.rel = 'noopener';
+                    a.innerHTML = '<i class="fab fa-' + icon + '"></i>';
+                    socials.appendChild(a);
+                }
+
+                addSocial(member.facebookUrl, 'facebook-f');
+                addSocial(member.twitterUrl, 'twitter');
+                addSocial(member.instagramUrl, 'instagram');
+
+                imgWrap.appendChild(socials);
+
+                var body = document.createElement('div');
+                body.className = 'text-center p-4 mt-3';
+                var name = document.createElement('h5');
+                name.className = 'fw-bold mb-0';
+                name.textContent = member.name || 'Team Member';
+                var role = document.createElement('small');
+                role.textContent = member.role || '';
+                body.appendChild(name);
+                body.appendChild(role);
+
+                card.appendChild(imgWrap);
+                card.appendChild(body);
+                col.appendChild(card);
+                fragment.appendChild(col);
+            });
+
+            container.appendChild(fragment);
+        }
+
+        if (teamContainers.length) {
+            fetch((API_BASE || '') + '/api/staff')
+                .then(function (res) {
+                    if (!res.ok) throw new Error('request_failed');
+                    return res.json();
+                })
+                .then(function (data) {
+                    var list = Array.isArray(data) ? data : [];
+                    teamContainers.forEach(function (container) {
+                        renderTeam(container, list);
+                    });
+                })
+                .catch(function (err) {
+                    console.error('Failed to load staff', err);
+                    teamContainers.forEach(function (container) {
+                        container.innerHTML = '<div class="col-12 text-center text-danger small">Unable to load team right now.</div>';
+                    });
+                });
+        }
+
+        // Testimonials (dynamic) -> fetch from backend
+        var testimonialLists = Array.from(document.querySelectorAll('[data-testimonial-list]'));
+
+        function initTestimonialCarousel(el) {
+            var $el = $(el);
+            if ($el.hasClass('owl-loaded')) {
+                $el.trigger('destroy.owl.carousel');
+                $el.find('.owl-stage-outer').children().unwrap();
+                $el.removeClass('owl-center owl-loaded owl-text-select-on');
+            }
+            $el.owlCarousel({
+                autoplay: true,
+                smartSpeed: 1000,
+                margin: 25,
+                dots: false,
+                loop: true,
+                nav : true,
+                navText : [
+                    '<i class="bi bi-arrow-left"></i>',
+                    '<i class="bi bi-arrow-right"></i>'
+                ],
+                responsive: {
+                    0:{ items:1 },
+                    768:{ items:2 }
+                }
+            });
+        }
+
+        function buildTestimonialItem(item) {
+            var wrapper = document.createElement('div');
+            wrapper.className = 'testimonial-item position-relative bg-white rounded overflow-hidden';
+
+            var p = document.createElement('p');
+            var brandVacation = document.createElement('span');
+            brandVacation.className = 'text-primary';
+            brandVacation.textContent = 'Vacation';
+            var brandGo = document.createElement('span');
+            brandGo.textContent = 'Go ';
+            p.appendChild(brandVacation);
+            p.appendChild(brandGo);
+            p.appendChild(document.createTextNode(item.message || ''));
+            wrapper.appendChild(p);
+
+            var infoRow = document.createElement('div');
+            infoRow.className = 'd-flex align-items-center';
+
+            var img = document.createElement('img');
+            img.className = 'img-fluid flex-shrink-0 rounded';
+            img.src = item.photoUrl || 'img/testimonial-1.jpg';
+            img.style.width = '45px';
+            img.style.height = '45px';
+            img.alt = item.name || 'Client';
+            infoRow.appendChild(img);
+
+            var textWrap = document.createElement('div');
+            textWrap.className = 'ps-3';
+            var h6 = document.createElement('h6');
+            h6.className = 'fw-bold mb-1';
+            h6.textContent = item.name || 'Client Name';
+            var small = document.createElement('small');
+            small.textContent = item.role || 'Guest';
+            textWrap.appendChild(h6);
+            textWrap.appendChild(small);
+            infoRow.appendChild(textWrap);
+
+            wrapper.appendChild(infoRow);
+
+            var quoteIcon = document.createElement('i');
+            quoteIcon.className = 'fa fa-quote-right fa-3x text-primary position-absolute end-0 bottom-0 me-4 mb-n1';
+            wrapper.appendChild(quoteIcon);
+
+            return wrapper;
+        }
+
+        if (testimonialLists.length) {
+            fetch((API_BASE || '') + '/api/testimonials')
+                .then(function (res) {
+                    if (!res.ok) throw new Error('request_failed');
+                    return res.json();
+                })
+                .then(function (data) {
+                    var list = Array.isArray(data) ? data : [];
+                    testimonialLists.forEach(function (container) {
+                        container.innerHTML = '';
+                        if (!list.length) {
+                            container.innerHTML = '<div class="testimonial-item position-relative bg-white rounded overflow-hidden text-center text-muted py-4">No testimonials available right now.</div>';
+                        } else {
+                            var fragment = document.createDocumentFragment();
+                            list.forEach(function (item) {
+                                fragment.appendChild(buildTestimonialItem(item));
+                            });
+                            container.appendChild(fragment);
+                        }
+                        initTestimonialCarousel(container);
+                    });
+                })
+                .catch(function (err) {
+                    console.error('Failed to load testimonials', err);
+                    testimonialLists.forEach(function (container) {
+                        container.innerHTML = '<div class="testimonial-item position-relative bg-white rounded overflow-hidden text-center text-danger py-4">Unable to load testimonials right now.</div>';
+                        initTestimonialCarousel(container);
+                    });
+                });
         }
 
         var overlay = document.getElementById('destinationOverlay');
@@ -406,6 +600,10 @@
                     card.classList.toggle('d-none', !match);
                     card.classList.toggle('is-hidden', !match);
                     card.setAttribute('aria-hidden', (!match).toString());
+                    if (match) {
+                        card.style.visibility = 'visible';
+                        card.style.animationName = 'none';
+                    }
                 });
             }
 

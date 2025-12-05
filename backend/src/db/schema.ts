@@ -55,3 +55,24 @@ export const bookingRelations = relations(bookings, ({ one }) => ({
         references: [destinations.id]
     })
 }));
+
+export const staff = pgTable('staff', {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull(),
+    role: text('role').notNull(),
+    photoUrl: text('photo_url'),
+    facebookUrl: text('facebook_url'),
+    twitterUrl: text('twitter_url'),
+    instagramUrl: text('instagram_url'),
+    bio: text('bio'),
+    createdAt: timestamp('created_at', { withTimezone: false }).notNull().defaultNow()
+});
+
+export const testimonials = pgTable('testimonials', {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull(),
+    role: text('role').notNull(),
+    message: text('message').notNull(),
+    photoUrl: text('photo_url'),
+    createdAt: timestamp('created_at', { withTimezone: false }).notNull().defaultNow()
+});
