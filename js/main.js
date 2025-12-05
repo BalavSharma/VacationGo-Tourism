@@ -1,6 +1,14 @@
 (function ($) {
     "use strict";
 
+    // API base (defaults to same origin; fallback to localhost:4000 for Live Server)
+    const defaultApiBase = (function () {
+        // If already on port 4000 (backend), keep same-origin.
+        if (window.location.port === '4000') return '';
+        return 'http://localhost:4000';
+    })();
+    const API_BASE = (window.BACKEND_API_BASE || defaultApiBase).replace(/\/$/, '');
+
     // Spinner
     var spinner = function () {
         setTimeout(function () {
@@ -479,6 +487,258 @@
                 highlightBookingCard();
             }
         }
+
+        // Booking form submission -> backend
+        var bookingForms = Array.from(document.querySelectorAll('.js-booking-form'));
+
+        var bookingStatusTimers = new WeakMap();
+
+        function clearBookingStatus(form) {
+            var successEl = form.querySelector('.js-booking-success');
+            var errorEl = form.querySelector('.js-booking-error');
+            if (successEl) successEl.classList.add('d-none');
+            if (errorEl) errorEl.classList.add('d-none');
+            if (bookingStatusTimers.has(form)) {
+                clearTimeout(bookingStatusTimers.get(form));
+                bookingStatusTimers.delete(form);
+            }
+        }
+
+        function setBookingStatus(form, type, message) {
+            var successEl = form.querySelector('.js-booking-success');
+            var errorEl = form.querySelector('.js-booking-error');
+            clearBookingStatus(form);
+
+            var target =
+                type === 'success' ? successEl :
+                type === 'error' ? errorEl :
+                null;
+
+            if (target) {
+                target.textContent = message || target.textContent;
+                target.classList.remove('d-none');
+                target.classList.add('d-block', 'text-center', 'w-100');
+                var timer = window.setTimeout(function () {
+                    clearBookingStatus(form);
+                }, 2000);
+                bookingStatusTimers.set(form, timer);
+            }
+        }
+
+        function setSubmitting(form, isSubmitting) {
+            var submitBtn = form.querySelector('.js-booking-submit');
+            if (!submitBtn) return;
+            submitBtn.disabled = isSubmitting;
+            submitBtn.textContent = isSubmitting ? 'Submitting...' : 'Submit';
+        }
+
+        var dateInputs = Array.from(document.querySelectorAll('input[name="startDate"]'));
+
+        var todayIso = new Date();
+        var isoDate = todayIso.toISOString().split('T')[0];
+
+        dateInputs.forEach(function (input) {
+            input.placeholder = 'mm/dd/yyyy';
+            input.min = isoDate;
+            input.removeAttribute('lang');
+            input.addEventListener('focus', function () {
+                if (input.showPicker) {
+                    input.showPicker();
+                }
+            });
+            input.addEventListener('click', function () {
+                if (input.showPicker) {
+                    input.showPicker();
+                }
+            });
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && input.showPicker) {
+                    e.preventDefault();
+                    input.showPicker();
+                }
+            });
+        });
+
+        bookingForms.forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                event.preventDefault();
+                setBookingStatus(form, null);
+
+                var formData = new FormData(form);
+                var name = (formData.get('name') || '').trim();
+                var contact = (formData.get('contact') || '').trim();
+                var startDate = (formData.get('startDate') || '').trim();
+                var pkg = (formData.get('package') || '').trim();
+
+                if (!name || !contact || !startDate || !pkg) {
+                    setBookingStatus(form, 'error', 'Please fill all fields (name, contact, date, package).');
+                    return;
+                }
+
+                var isEmail = contact.includes('@');
+                var email = isEmail ? contact : '';
+                var phone = isEmail ? '' : contact;
+
+                var messageParts = [];
+                if (pkg) messageParts.push('Package: ' + pkg);
+                if (startDate) messageParts.push('Arrival: ' + startDate);
+                if (phone) messageParts.push('Phone: ' + phone);
+                if (email && !isEmail) messageParts.push('Email: ' + email);
+
+                var payload = {
+                    name: name,
+                    contact: contact,
+                    email: email || undefined,
+                    phone: phone || undefined,
+                    startDate: startDate || undefined,
+                    message: messageParts.length ? messageParts.join(' | ') : undefined
+                };
+
+                setSubmitting(form, true);
+
+                fetch((API_BASE || '') + '/api/bookings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                    .then(function (res) {
+                        if (!res.ok) {
+                            throw new Error('request_failed');
+                        }
+                        return res.json();
+                    })
+                    .then(function (body) {
+                        if (body && typeof body.id !== 'undefined') {
+                            form.reset();
+                            setBookingStatus(form, 'success', 'Thank you! We will contact you shortly.');
+                        } else {
+                            throw new Error('invalid_response');
+                        }
+                    })
+                    .catch(function (err) {
+                        console.error('Booking submit failed', err);
+                        setBookingStatus(form, 'error', 'Could not submit. Please try again.');
+                    })
+                    .finally(function () {
+                        setSubmitting(form, false);
+                    });
+            });
+        });
+
+        // Contact form submission -> inquiries endpoint
+        var contactForms = Array.from(document.querySelectorAll('.js-contact-form'));
+
+        var contactStatusTimers = new WeakMap();
+
+        function clearContactStatus(form) {
+            var successEl = form.querySelector('.js-contact-success');
+            var errorEl = form.querySelector('.js-contact-error');
+            if (successEl) successEl.classList.add('d-none');
+            if (errorEl) errorEl.classList.add('d-none');
+            if (contactStatusTimers.has(form)) {
+                clearTimeout(contactStatusTimers.get(form));
+                contactStatusTimers.delete(form);
+            }
+        }
+
+        function setContactStatus(form, type, message) {
+            var successEl = form.querySelector('.js-contact-success');
+            var errorEl = form.querySelector('.js-contact-error');
+            clearContactStatus(form);
+
+            var target =
+                type === 'success' ? successEl :
+                type === 'error' ? errorEl :
+                null;
+
+            if (target) {
+                target.textContent = message || target.textContent;
+                target.classList.remove('d-none');
+                target.classList.add('d-block', 'text-center', 'w-100');
+                var timer = window.setTimeout(function () {
+                    clearContactStatus(form);
+                }, 2000);
+                contactStatusTimers.set(form, timer);
+            }
+        }
+
+        function setContactSubmitting(form, isSubmitting) {
+            var submitBtn = form.querySelector('.js-contact-submit');
+            if (!submitBtn) return;
+            submitBtn.disabled = isSubmitting;
+            submitBtn.textContent = isSubmitting ? 'Sending...' : 'Send Message';
+        }
+
+        contactForms.forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                event.preventDefault();
+                setContactStatus(form, null);
+
+                var formData = new FormData(form);
+                var name = (formData.get('name') || '').trim();
+                var email = (formData.get('email') || '').trim();
+                var subject = (formData.get('subject') || '').trim();
+                var message = (formData.get('message') || '').trim();
+
+                if (!name || !email || !message) {
+                    setContactStatus(form, 'error', 'Please fill name, email, and message.');
+                    return;
+                }
+
+                setContactSubmitting(form, true);
+
+                fetch((API_BASE || '') + '/api/inquiries', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        email: email,
+                        subject: subject || undefined,
+                        message: message || undefined
+                    })
+                })
+                    .then(function (res) {
+                        if (!res.ok) throw new Error('request_failed');
+                        return res.json();
+                    })
+                    .then(function (body) {
+                        if (body && typeof body.id !== 'undefined') {
+                            form.reset();
+                            setContactStatus(form, 'success', 'Message sent! We will get back to you soon.');
+                        } else {
+                            throw new Error('invalid_response');
+                        }
+                    })
+                    .catch(function (err) {
+                        console.error('Contact submit failed', err);
+                        setContactStatus(form, 'error', 'Could not send. Please try again.');
+                    })
+                    .finally(function () {
+                        setContactSubmitting(form, false);
+                    });
+            });
+        });
+
+        // Newsletter -> WhatsApp send
+        var WHATSAPP_NUMBER = '17984037';
+        var whatsappButtons = Array.from(document.querySelectorAll('.js-whatsapp-send'));
+
+        whatsappButtons.forEach(function (btn) {
+            var wrapper = btn.closest('.position-relative') || btn.parentElement;
+            var messageField = wrapper ? wrapper.querySelector('.newsletter-message') : null;
+
+            btn.addEventListener('click', function () {
+                var text = messageField ? (messageField.value || '').trim() : '';
+                if (!text) {
+                    if (messageField) {
+                        messageField.focus();
+                    }
+                    return;
+                }
+                var url = 'https://wa.me/' + WHATSAPP_NUMBER + '?text=' + encodeURIComponent(text);
+                window.open(url, '_blank');
+            });
+        });
 
         var quotePackageSelect = document.getElementById('selectPackage');
         if (quotePackageSelect) {
